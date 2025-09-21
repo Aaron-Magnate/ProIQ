@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ProIQ | Reimagined</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
+    <script src="https://cdn.quilljs.com/1.3.6/quill.min.js"></script>
+    
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+    <script src="https://unpkg.com/html-to-docx-ts@1.8.0/dist/browser/html-to-docx.js"></script>
+    
+    <style>
+        :root {
+            --primary-color: #3b82f6;
+            --primary-hover-color: #60a5fa;
+            --bg-main: #111827;
+            --bg-content: #1f2937;
+            --bg-sidebar: #0f172a;
+            --bg-header: #1f2937;
+            --border-color: #374151;
+            --text-primary: #f9fafb;
+            --text-secondary: #9ca3af;
+            --text-dark: #1f2937;
+            --selection-color: #3b82f6;
+            --font-family: 'Inter', system-ui, sans-serif;
+        }
+        
+        html { scroll-behavior: smooth; }
+        body {
+            font-family: var(--font-family);
+            background-color: var(--bg-main);
+            color: var(--text-primary);
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            overflow: hidden;
+        }
+
+        /* View Switching Logic */
+        #login-view, #app-view { display: none; }
+        body[data-view="login"] #login-view { display: flex; }
+        body[data-view="app"] #app-view { display: grid; }
+
+        /* Quill Editor Dark Theme */
+        .ql-editor { color: var(--text-primary); }
+        .ql-snow .ql-stroke { stroke: var(--text-secondary); }
+        .ql-snow .ql-picker-label { color: var(--text-secondary); }
+        .ql-toolbar { border-bottom: 1px solid var(--border-color) !important; }
+        .ql-container.ql-snow { border: none !important; }
+        .ql-editor.ql-blank::before { color: var(--text-secondary); font-style: normal; }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg-content); }
+        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+
+        /* Sheets Table */
+        #sheets-view-container { height: calc(100vh - 120px); overflow: auto; }
+        .sheets-table { border-collapse: collapse; table-layout: fixed; transform-origin: top left; transition: transform 0.2s ease-in-out; }
+        .sheets-table th, .sheets-table td {
+            border: 1px solid var(--border-color);
+            padding: 8px; min-width: 100px; outline: none; position: relative;
+            background-color: var(--bg-content); color: var(--text-primary);
+        }
+        .sheets-table th { background-color: var(--bg-main); font-weight: bold; text-align: center; position: sticky; z-index: 2; }
+        .sheets-table thead th { top: 0; z-index: 3; }
+        .sheets-table tbody th { left: 0; }
+        .sheets-table td.selected { box-shadow: inset 0 0 0 2px var(--selection-color); }
+        .sheets-table td.border-top-dark { border-top: 2px solid var(--primary-hover-color); }
+        .sheets-table td.border-bottom-dark { border-bottom: 2px solid var(--primary-hover-color); }
+        .sheets-table td.border-left-dark { border-left: 2px solid var(--primary-hover-color); }
+        .sheets-table td.border-right-dark { border-right: 2px solid var(--primary-hover-color); }
+
+        /* Toast Notification */
+        #toast {
+            position: fixed; bottom: -100px; left: 50%; transform: translateX(-50%);
+            padding: 12px 24px; border-radius: 8px; color: white; font-weight: 500;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15); transition: bottom 0.5s ease-in-out; z-index: 9999;
+        }
+        #toast.show { bottom: 30px; }
+        #toast.success { background-color: #10b981; }
+        #toast.error { background-color: #ef4444; }
+
+        /* Loader Spinner */
+        .loader {
+            border: 4px solid #374151; border-radius: 50%; border-top: 4px solid var(--primary-color);
+            width: 40px; height: 40px; animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body data-view="login">
+
+    <div id="login-view" class="w-full h-screen flex-col justify-center items-center">
+        <div class="text-center p-10 bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full border border-gray-700">
+            <h1 class="text-4xl font-bold text-white mb-3">Welcome to ProIQ</h1>
+            <p class="text-gray-400 mb-8">The Future of Document Editing is Here.</p>
+            <button id="google-signin-btn" class="w-full flex items-center justify-center gap-3 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition-transform transform hover:scale-105">
+                <svg class="w-6 h-6" viewBox="0 0 48 48"><path d="M44.5 24.3c0-1.6-.1-3.2-.4-4.8H24v9.1h11.5c-.5 2.9-2 5.5-4.5 7.2v5.9h7.7c4.5-4.1 7.1-10.1 7.1-17.4z" fill="#4285F4"></path><path d="M24 45c6.5 0 11.9-2.1 15.9-5.7l-7.7-5.9c-2.1 1.4-4.9 2.3-7.2 2.3-5.5 0-10.2-3.7-11.9-8.8H4.1v5.9C8.1 40.1 15.5 45 24 45z" fill="#34A853"></path><path d="M12.1 27.6c-.4-1.2-.6-2.5-.6-3.8s.2-2.6.6-3.8V14H4.1C2.5 17.1 2 20.5 2 24s.5 6.9 2.1 10.1l8-6.1z" fill="#FBBC05"></path><path d="M24 10.9c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.9 4.1 30.5 2 24 2 15.5 2 8.1 6.9 4.1 14l8 6.1c1.7-5.1 6.4-8.8 11.9-8.8z" fill="#EA4335"></path></svg>
+                <span>Sign In with Google</span>
+            </button>
+        </div>
+    </div>
+
+    <div id="app-view" class="h-screen w-screen grid-cols-[300px_1fr] bg-gray-900">
+        <aside class="bg-slate-900 flex flex-col p-4 border-r border-gray-700">
+            <div class="flex items-center gap-3 mb-6">
+                 <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-blue-500"><path d="M12 22h6a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v3"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="m2 15 2 2 4-4"/><path d="M2 20h8"/></svg>
+                <h1 class="text-2xl font-bold text-white">ProIQ Drive</h1>
+            </div>
+
+            <div class="flex gap-2 mb-4">
+                <button id="new-doc-btn" class="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-3 rounded-lg shadow-sm transition"><i data-lucide="file-plus-2" class="w-5 h-5"></i> New Doc</button>
+                <button id="new-sheet-btn" class="flex-1 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 px-3 rounded-lg shadow-sm transition"><i data-lucide="table-2" class="w-5 h-5"></i> New Sheet</button>
+            </div>
+            
+            <input type="file" id="cloud-upload-input" class="hidden" multiple>
+            <button id="cloud-upload-btn" class="w-full flex items-center justify-center gap-2 bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-3 rounded-lg shadow-sm transition mb-4"><i data-lucide="upload-cloud" class="w-5 h-5"></i> Upload File</button>
+
+            <div id="file-list-container" class="flex-grow overflow-y-auto space-y-2 pr-2">
+                <div id="loader" class="flex justify-center items-center p-10"><div class="loader"></div></div>
+                <div id="file-list-body"></div>
+            </div>
+
+            <div class="mt-auto pt-4 border-t border-gray-700 flex items-center justify-between">
+                <span id="user-name" class="font-semibold text-gray-300 text-sm truncate"></span>
+                <button id="signout-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-1.5 px-3 rounded-lg text-sm shadow transition">Sign Out</button>
+            </div>
+        </aside>
+
+        <main id="editor-container" class="flex flex-col">
+            <header class="bg-gray-800 p-2 flex justify-between items-center flex-wrap gap-2 border-b border-gray-700">
+                <div class="flex items-center gap-2">
+                    <div class="flex items-center gap-2 bg-gray-700 rounded-lg p-1">
+                        <button data-view-target="document" class="view-btn px-3 py-1 text-sm font-semibold rounded-md"><i data-lucide="file-text" class="w-4 h-4 mr-1 inline-block"></i>Doc</button>
+                        <button data-view-target="sheets" class="view-btn px-3 py-1 text-sm font-semibold rounded-md"><i data-lucide="table" class="w-4 h-4 mr-1 inline-block"></i>Sheet</button>
+                    </div>
+                    <input type="text" id="file-name" value="untitled" class="px-2 py-1 text-sm bg-gray-700 border border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 outline-none transition w-64">
+                </div>
+                <button id="save-btn" class="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg shadow-sm transition">
+                    <i data-lucide="save" class="w-5 h-5"></i> Save to Drive
+                </button>
+            </header>
+
+            <div id="editor-view" class="flex-grow overflow-hidden bg-gray-800">
+                 <div id="document-view" class="h-full flex flex-col">
+                    <div id="document-toolbar" class="toolbar ql-toolbar ql-snow bg-gray-800">
+                        <span class="ql-formats"><select class="ql-font"></select><select class="ql-size"></select></span>
+                        <span class="ql-formats"><button class="ql-bold"></button><button class="ql-italic"></button><button class="ql-underline"></button><select class="ql-color"></select><select class="ql-background"></select></span>
+                        <span class="ql-formats"><button class="ql-link"></button><button class="ql-image"></button></span>
+                        <span class="ql-formats"><button class="ql-align" value=""></button><button class="ql-align" value="center"></button><button class="ql-align" value="right"></button><button class="ql-align" value="justify"></button></span>
+                        <span class="ql-formats"><button class="ql-list" value="ordered"></button><button class="ql-list" value="bullet"></button></span>
+                    </div>
+                    <div id="document-editor-container" class="flex-grow overflow-y-auto"><div id="document-editor" class="h-full"></div></div>
+                </div>
+                
+                <div id="sheets-view" class="h-full flex flex-col">
+                     <div class="flex items-center p-1.5 border-b border-gray-700 bg-gray-900 gap-4">
+                        <div id="selected-cell-info" class="font-mono text-sm font-bold text-gray-400 w-20 text-center border-r border-gray-700 pr-4">A1</div>
+                        <div class="flex-grow bg-gray-700 rounded border border-gray-600"><input id="formula-bar" type="text" class="w-full p-1 text-sm outline-none bg-transparent" placeholder="Enter cell content..."></div>
+                    </div>
+                    <div id="sheets-toolbar" class="p-1 border-b border-gray-700 bg-gray-800 flex flex-wrap items-center gap-2 text-gray-300">
+                         <div class="flex items-center gap-1 p-1 border-r border-gray-700">
+                            <button id="zoom-out-btn" title="Zoom Out"><i data-lucide="zoom-out" class="w-5 h-5"></i></button>
+                            <span id="zoom-level-display" class="font-mono text-sm px-2 w-16 text-center">100%</span>
+                            <button id="zoom-in-btn" title="Zoom In"><i data-lucide="zoom-in" class="w-5 h-5"></i></button>
+                        </div>
+                        <div class="flex items-center gap-1 p-1 border-r border-gray-700">
+                            <button data-style="fontWeight" data-value="bold" class="sheet-style-toggle"><i data-lucide="bold" class="w-5 h-5"></i></button>
+                            <button data-style="fontStyle" data-value="italic" class="sheet-style-toggle"><i data-lucide="italic" class="w-5 h-5"></i></button>
+                            <button data-style="textDecoration" data-value="underline" class="sheet-style-toggle"><i data-lucide="underline" class="w-5 h-5"></i></button>
+                            <label class="relative"><i data-lucide="paint-bucket" class="w-5 h-5"></i><input type="color" data-style="color" class="sheet-style-apply opacity-0 w-full h-full absolute inset-0 cursor-pointer" value="#ffffff"></label>
+                            <label class="relative"><i data-lucide="highlighter" class="w-5 h-5"></i><input type="color" data-style="backgroundColor" class="sheet-style-apply opacity-0 w-full h-full absolute inset-0 cursor-pointer" value="#1f2937"></label>
+                        </div>
+                        <div class="relative p-1 border-r border-gray-700">
+                            <button id="border-tool-btn"><i data-lucide="table-properties" class="w-5 h-5"></i></button>
+                            <div id="border-options" class="absolute top-full left-0 mt-2 bg-gray-700 border border-gray-600 rounded shadow-lg z-10 hidden w-48">
+                                <button data-border-type="all" class="w-full text-left px-3 py-2 hover:bg-gray-600 flex items-center gap-2 text-sm"><i data-lucide="app-window" class="w-4 h-4"></i> All Borders</button>
+                                <button data-border-type="outside" class="w-full text-left px-3 py-2 hover:bg-gray-600 flex items-center gap-2 text-sm"><i data-lucide="square" class="w-4 h-4"></i> Outside Borders</button>
+                                <button data-border-type="none" class="w-full text-left px-3 py-2 hover:bg-gray-600 flex items-center gap-2 text-sm"><i data-lucide="eraser" class="w-4 h-4"></i> Clear Borders</button>
+                            </div>
+                        </div>
+                         <div class="flex items-center gap-1 p-1">
+                            <button id="add-rows-btn" class="flex items-center gap-1 text-sm"><i data-lucide="rows-3" class="w-5 h-5"></i> Add Rows</button>
+                            <button id="add-cols-btn" class="ml-2 flex items-center gap-1 text-sm"><i data-lucide="columns-3" class="w-5 h-5"></i> Add Cols</button>
+                        </div>
+                    </div>
+                    <div id="sheets-view-container"><table id="sheets-table" class="sheets-table"></table></div>
+                </div>
+            </div>
+        </main>
+    </div>
+    
+    <div id="toast"></div>
+
+    <script>
+    class WebApp {
+        constructor() {
+            this.CONSTANTS = {
+                VIEWS: { LOGIN: 'login', APP: 'app' },
+                EDITOR_MODES: { DOC: 'document', SHEET: 'sheets' },
+                DEFAULT_ROWS: 50,
+                DEFAULT_COLS: 26,
+                API_BASE_URL: 'https://api.magnatesoftware.com/api/v3/proiq'
+            };
+
+            this.state = {
+                currentView: this.CONSTANTS.VIEWS.LOGIN,
+                editorMode: this.CONSTANTS.EDITOR_MODES.DOC,
+                isAuthenticated: false,
+                authData: null,
+                fileName: 'untitled',
+                sheetData: [],
+                selectedCells: [],
+                isSheetMouseDown: false,
+                sheetZoom: 1.0,
+            };
+
+            this.ui = this._getUIReferences();
+            this.quill = null;
+            this.init();
+        }
+
+        _getUIReferences() {
+            return {
+                body: document.body,
+                googleSignInBtn: document.getElementById('google-signin-btn'),
+                signOutBtn: document.getElementById('signout-btn'),
+                userName: document.getElementById('user-name'),
+                newDocBtn: document.getElementById('new-doc-btn'),
+                newSheetBtn: document.getElementById('new-sheet-btn'),
+                cloudUploadBtn: document.getElementById('cloud-upload-btn'),
+                cloudUploadInput: document.getElementById('cloud-upload-input'),
+                fileListBody: document.getElementById('file-list-body'),
+                loader: document.getElementById('loader'),
+                viewButtons: document.querySelectorAll('.view-btn'),
+                fileNameInput: document.getElementById('file-name'),
+                saveBtn: document.getElementById('save-btn'),
+                sheetsTable: document.getElementById('sheets-table'),
+                selectedCellInfo: document.getElementById('selected-cell-info'),
+                formulaBar: document.getElementById('formula-bar'),
+                toast: document.getElementById('toast'),
+                addRowsBtn: document.getElementById('add-rows-btn'),
+                addColsBtn: document.getElementById('add-cols-btn'),
+                zoomInBtn: document.getElementById('zoom-in-btn'),
+                zoomOutBtn: document.getElementById('zoom-out-btn'),
+                zoomLevelDisplay: document.getElementById('zoom-level-display'),
+                borderToolBtn: document.getElementById('border-tool-btn'),
+                borderOptions: document.getElementById('border-options'),
+            };
+        }
+
+        init() {
+            this._initAuth();
+        }
+        
+        _initializeApp() {
+            this._initializeQuill();
+            this._bindEventListeners();
+            this._renderSheet(this.CONSTANTS.DEFAULT_ROWS, this.CONSTANTS.DEFAULT_COLS);
+            this._updateZoom();
+            this._updateEditorModeUI();
+            lucide.createIcons();
+            console.log("WebApp Initialized!");
+        }
+        
+        _initializeQuill() {
+            const Font = Quill.import('formats/font');
+            Font.whitelist = ['arial', 'courier-new', 'georgia', 'times-new-roman', 'verdana'];
+            Quill.register(Font, true);
+
+            this.quill = new Quill('#document-editor', {
+                modules: { toolbar: '#document-toolbar' },
+                theme: 'snow'
+            });
+        }
+
+        // --- Authentication & API ---
+        async _initAuth() {
+            const params = new URLSearchParams(window.location.search);
+            if (params.has('code') && params.has('state')) {
+                await this._handleOAuthCallback();
+            } else {
+                this._checkAuthState();
+            }
+        }
+        
+        async _fetchWithAuth(endpoint, options = {}) {
+            if (!this.state.authData?.access_token) {
+                this._showToast('Authentication error. Please sign in again.', 'error');
+                this._signOut();
+                return;
+            }
+            const headers = { 'Authorization': `Bearer ${this.state.authData.access_token}`, ...options.headers };
+            
+            if (options.body instanceof FormData) {
+                // Let the browser set the Content-Type for FormData
+            } else if (!headers['Content-Type']) {
+                headers['Content-Type'] = 'application/json';
+            }
+
+            try {
+                const response = await fetch(`${this.CONSTANTS.API_BASE_URL}${endpoint}`, { ...options, headers });
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ detail: 'An unknown API error occurred.' }));
+                    throw new Error(errorData.detail || `HTTP error! Status: ${response.status}`);
+                }
+                if (response.headers.get('Content-Type')?.includes('application/json')) {
+                    return await response.json();
+                }
+                return response;
+            } catch (error) {
+                console.error('API Call Error:', error);
+                this._showToast(error.message, 'error');
+                throw error;
+            }
+        }
+
+        _checkAuthState() {
+            const authDataString = localStorage.getItem('authData');
+            if (authDataString) {
+                this.state.authData = JSON.parse(authDataString);
+                this.state.isAuthenticated = true;
+                this._renderAuthenticatedUI();
+            } else {
+                this._renderUnauthenticatedUI();
+            }
+        }
+
+        async _handleGoogleSignIn() {
+            const authBtn = this.ui.googleSignInBtn;
+            authBtn.disabled = true;
+            authBtn.textContent = 'Redirecting...';
+            try {
+                const response = await fetch(`https://api.magnatesoftware.com/api/v3/google-oauth/initiate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        platform: 'web',
+                        redirect_uri: window.location.origin + window.location.pathname
+                    }),
+                });
+                if (!response.ok) throw new Error('Failed to initiate auth.');
+                const { auth_url, state } = await response.json();
+                sessionStorage.setItem('oauth_state', state);
+                window.location.href = auth_url;
+            } catch (error) {
+                console.error('Sign-in error:', error);
+                alert('Could not start the sign-in process.');
+                authBtn.disabled = false;
+                authBtn.innerHTML = `<span>Sign In with Google</span>`;
+            }
+        }
+
+        async _handleOAuthCallback() {
+            const params = new URLSearchParams(window.location.search);
+            const code = params.get('code');
+            const state = params.get('state');
+            window.history.replaceState({}, document.title, window.location.pathname);
+
+            if (!code || !state || state !== sessionStorage.getItem('oauth_state')) {
+                return this._renderUnauthenticatedUI();
+            }
+            sessionStorage.removeItem('oauth_state');
+
+            try {
+                const response = await fetch(`https://api.magnatesoftware.com/api/v3/google-oauth/callback`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code, state }),
+                });
+                if (!response.ok) throw new Error('Token exchange failed.');
+                const tokenData = await response.json();
+                localStorage.setItem('authData', JSON.stringify(tokenData));
+                this.state.authData = tokenData;
+                this.state.isAuthenticated = true;
+                this._renderAuthenticatedUI();
+            } catch (error) {
+                alert(`Sign-in failed: ${error.message}`);
+                this._renderUnauthenticatedUI();
+            }
+        }
+        
+        _signOut() {
+            localStorage.removeItem('authData');
+            this.state.isAuthenticated = false;
+            this.state.authData = null;
+            this._renderUnauthenticatedUI();
+        }
+
+        _renderAuthenticatedUI() {
+            this.state.currentView = this.CONSTANTS.VIEWS.APP;
+            this.ui.userName.textContent = this.state.authData?.user?.name || 'User';
+            this._updateView();
+            this._initializeApp();
+            this._fetchFiles();
+        }
+
+        _renderUnauthenticatedUI() {
+            this.state.currentView = this.CONSTANTS.VIEWS.LOGIN;
+            this._updateView();
+            this._bindAuthEventListeners();
+        }
+
+        // --- Event Management ---
+        _bindAuthEventListeners() {
+            this.ui.googleSignInBtn.addEventListener('click', () => this._handleGoogleSignIn());
+        }
+
+        _bindEventListeners() {
+            this.ui.signOutBtn.addEventListener('click', () => this._signOut());
+            this.ui.newDocBtn.addEventListener('click', () => this._createNewFile(this.CONSTANTS.EDITOR_MODES.DOC));
+            this.ui.newSheetBtn.addEventListener('click', () => this._createNewFile(this.CONSTANTS.EDITOR_MODES.SHEET));
+            this.ui.cloudUploadBtn.addEventListener('click', () => this.ui.cloudUploadInput.click());
+            this.ui.cloudUploadInput.addEventListener('change', (e) => this._handleCloudUpload(e));
+            this.ui.viewButtons.forEach(btn => btn.addEventListener('click', (e) => this._handleEditorModeSwitch(e)));
+            this.ui.saveBtn.addEventListener('click', () => this._handleSaveToServer());
+            this.ui.fileNameInput.addEventListener('change', (e) => this.state.fileName = e.target.value);
+            
+            // Sheets Listeners
+            this.ui.sheetsTable.addEventListener('mousedown', (e) => this._handleSheetMouseDown(e));
+            this.ui.sheetsTable.addEventListener('mouseover', (e) => this._handleSheetMouseOver(e));
+            document.addEventListener('mouseup', () => this.state.isSheetMouseDown = false);
+            this.ui.formulaBar.addEventListener('input', (e) => this._updateCellFromFormulaBar(e.target.value));
+            this.ui.sheetsTable.addEventListener('input', (e) => this._updateFormulaBarFromCell(e.target));
+            this.ui.addRowsBtn.addEventListener('click', () => this._addRows(10));
+            this.ui.addColsBtn.addEventListener('click', () => this._addCols(5));
+            this.ui.sheetsTable.addEventListener('dblclick', (e) => this._handleCellDoubleClick(e));
+            this.ui.sheetsTable.addEventListener('blur', (e) => this._handleCellBlur(e), true);
+            this.ui.zoomInBtn.addEventListener('click', () => this._handleZoom('in'));
+            this.ui.zoomOutBtn.addEventListener('click', () => this._handleZoom('out'));
+            this.ui.borderToolBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.ui.borderOptions.classList.toggle('hidden');
+            });
+            document.querySelectorAll('.border-option-btn').forEach(btn => btn.addEventListener('click', (e) => this._applyBorders(e.currentTarget.dataset.borderType)));
+            document.addEventListener('click', (e) => {
+                if (!this.ui.borderToolBtn.contains(e.target)) this.ui.borderOptions.classList.add('hidden');
+            });
+            document.querySelectorAll('.sheet-style-apply').forEach(el => el.addEventListener('input', (e) => this._applyStyle(e.currentTarget.dataset.style, e.currentTarget.value)));
+            document.querySelectorAll('.sheet-style-toggle').forEach(el => el.addEventListener('click', (e) => this._toggleStyle(e.currentTarget.dataset.style, e.currentTarget.dataset.value, e.currentTarget)));
+        }
+
+        // --- View Management ---
+        _updateView() {
+            this.ui.body.dataset.view = this.state.currentView;
+        }
+        
+        _handleEditorModeSwitch(e) {
+            const targetMode = e.currentTarget.dataset.viewTarget;
+            if (targetMode && targetMode !== this.state.editorMode) {
+                this.state.editorMode = targetMode;
+                this._updateEditorModeUI();
+            }
+        }
+
+        _updateEditorModeUI() {
+            document.getElementById('document-view').style.display = this.state.editorMode === this.CONSTANTS.EDITOR_MODES.DOC ? 'flex' : 'none';
+            document.getElementById('sheets-view').style.display = this.state.editorMode === this.CONSTANTS.EDITOR_MODES.SHEET ? 'flex' : 'none';
+            this.ui.viewButtons.forEach(btn => {
+                const isActive = btn.dataset.viewTarget === this.state.editorMode;
+                btn.classList.toggle('bg-blue-600', isActive);
+                btn.classList.toggle('text-white', isActive);
+                btn.classList.toggle('text-gray-300', !isActive);
+            });
+        }
+
+        // --- File System Logic ---
+        async _fetchFiles() {
+            this.ui.loader.style.display = 'flex';
+            this.ui.fileListBody.innerHTML = '';
+            try {
+                const data = await this._fetchWithAuth('/list_files');
+                this._renderFileSystem(data.data);
+            } catch (error) {
+                this.ui.fileListBody.innerHTML = '<p class="text-red-400 text-center">Could not fetch files.</p>';
+            } finally {
+                this.ui.loader.style.display = 'none';
+            }
+        }
+
+        _renderFileSystem(files) {
+            this.ui.fileListBody.innerHTML = '';
+            if (!files || files.length === 0) {
+                this.ui.fileListBody.innerHTML = '<p class="text-gray-500 text-center p-4">No files found.</p>';
+                return;
+            }
+            
+            const sortedFiles = files.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+            sortedFiles.forEach(file => {
+                const fileDiv = document.createElement('div');
+                fileDiv.className = 'flex items-center p-2.5 bg-gray-800 hover:bg-gray-700 rounded-lg cursor-pointer transition group';
+                
+                const icon = file.mimetype.includes('sheet') ? 'table-2' : 'file-text';
+                
+                fileDiv.innerHTML = `
+                    <i data-lucide="${icon}" class="w-5 h-5 text-gray-400 mr-3"></i>
+                    <div class="flex-grow truncate">
+                        <p class="font-medium text-white truncate">${file.filename}</p>
+                        <p class="text-xs text-gray-500">By ${file.added_by_user_name}</p>
+                    </div>
+                    <button class="delete-file-btn text-gray-500 hover:text-red-500 opacity-0 group-hover:opacity-100 transition ml-2 p-1">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                `;
+
+                fileDiv.addEventListener('click', (e) => {
+                    if (!e.target.closest('.delete-file-btn')) {
+                       this._handleOpenFile(file.id, file.filename, file.mimetype);
+                    }
+                });
+                fileDiv.querySelector('.delete-file-btn').addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this._handleDeleteFile(file.id, file.filename);
+                });
+                
+                this.ui.fileListBody.appendChild(fileDiv);
+            });
+            lucide.createIcons();
+        }
+
+        // --- File Handling ---
+        _createNewFile(mode) {
+            this.quill.setContents([]);
+            this._renderSheet(this.CONSTANTS.DEFAULT_ROWS, this.CONSTANTS.DEFAULT_COLS);
+            this.state.editorMode = mode;
+            this.state.fileName = 'untitled';
+            this.ui.fileNameInput.value = 'untitled';
+            this._updateEditorModeUI();
+        }
+
+        async _handleOpenFile(fileId, fileName, mimeType) {
+            this._showToast(`Opening ${fileName}...`);
+            this.ui.saveBtn.disabled = true;
+            try {
+                const response = await this._fetchWithAuth(`/download_file/${fileId}`);
+                const fileBlob = await response.blob();
+                const arrayBuffer = await fileBlob.arrayBuffer();
+                
+                if (mimeType.includes('document')) {
+                    const result = await mammoth.convertToHtml({ arrayBuffer });
+                    this.quill.root.innerHTML = result.value;
+                    this.state.editorMode = this.CONSTANTS.EDITOR_MODES.DOC;
+                } else if (mimeType.includes('sheet')) {
+                    // === REPLACEMENT: Reading with ExcelJS ===
+                    const workbook = new ExcelJS.Workbook();
+                    await workbook.xlsx.load(arrayBuffer);
+                    const worksheet = workbook.worksheets[0];
+                    const jsonData = [];
+                    worksheet.eachRow({ includeEmpty: true }, (row) => {
+                        // Get values, ensuring empty cells are represented by empty strings
+                        const rowValues = row.values.slice(1); // .values is 1-based, slice(1) makes it 0-based
+                        jsonData.push(rowValues);
+                    });
+                    this.state.sheetData = jsonData;
+                    this._renderSheetFromData();
+                    this.state.editorMode = this.CONSTANTS.EDITOR_MODES.SHEET;
+                } else {
+                    throw new Error('Unsupported file type for editing.');
+                }
+                this.state.fileName = fileName.substring(0, fileName.lastIndexOf('.'));
+                this.ui.fileNameInput.value = this.state.fileName;
+                this._updateEditorModeUI();
+            } catch (error) {
+                console.error(`Error opening file: ${error.message}`, error);
+                this._showToast(`Error opening file: ${error.message}`, 'error');
+            } finally {
+                this.ui.saveBtn.disabled = false;
+            }
+        }
+        
+        async _handleDeleteFile(fileId, fileName) {
+            if (!confirm(`Are you sure you want to delete "${fileName}"?`)) return;
+
+            try {
+                await this._fetchWithAuth(`/delete_file/${fileId}`, { method: 'DELETE' });
+                this._showToast(`"${fileName}" deleted.`, 'success');
+                this._fetchFiles();
+            } catch (error) {
+                this._showToast(`Failed to delete file: ${error.message}`, 'error');
+            }
+        }
+
+        async _handleCloudUpload(event) {
+            const files = event.target.files;
+            if (!files.length) return;
+
+            this._showToast(`Uploading ${files.length} file(s)...`);
+            const uploadPromises = Array.from(files).map(file => {
+                const formData = new FormData();
+                formData.append('file', file);
+                return this._fetchWithAuth('/upload_file', { method: 'POST', body: formData });
+            });
+
+            try {
+                await Promise.all(uploadPromises);
+                this._showToast('Upload complete!', 'success');
+            } catch (error) {
+                this._showToast('An error occurred during upload.', 'error');
+            } finally {
+                this.ui.cloudUploadInput.value = '';
+                this._fetchFiles();
+            }
+        }
+
+        async _handleSaveToServer() {
+            const baseName = this.state.fileName || 'untitled';
+            this._showToast(`Saving "${baseName}"...`, 'success');
+            this.ui.saveBtn.disabled = true;
+            
+            let fileBlob, finalFileName;
+
+            try {
+                if (this.state.editorMode === this.CONSTANTS.EDITOR_MODES.DOC) {
+                    // === REPLACEMENT: Saving .docx with html-to-docx-ts ===
+                    finalFileName = `${baseName}.docx`;
+                    const htmlString = this.quill.root.innerHTML;
+                    fileBlob = await htmlToDocx.asBlob(htmlString);
+
+                } else {
+                    // === REPLACEMENT: Saving .xlsx with ExcelJS ===
+                    finalFileName = `${baseName}.xlsx`;
+                    const workbook = new ExcelJS.Workbook();
+                    const worksheet = workbook.addWorksheet('Sheet1');
+                    const rows = this.ui.sheetsTable.querySelectorAll('tbody tr');
+                    const data = [];
+                    rows.forEach(row => {
+                        const rowData = [];
+                        row.querySelectorAll('td').forEach(cell => rowData.push(cell.innerText));
+                        data.push(rowData);
+                    });
+                    worksheet.addRows(data);
+                    const buffer = await workbook.xlsx.writeBuffer();
+                    fileBlob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                }
+                
+                const formData = new FormData();
+                formData.append('file', fileBlob, finalFileName);
+                await this._fetchWithAuth('/upload_file', { method: 'POST', body: formData });
+                
+                this._showToast('File saved to drive!', 'success');
+                this._fetchFiles(); // Refresh file list
+
+            } catch (error) {
+                this._showToast('Could not save file.', 'error');
+            } finally {
+                this.ui.saveBtn.disabled = false;
+            }
+        }
+
+        // --- Sheets Logic ---
+        _renderSheet(rows, cols) {
+            let theadHtml = '<thead><tr><th></th>';
+            for (let j = 0; j < cols; j++) theadHtml += `<th>${this._colToLetter(j)}</th>`;
+            theadHtml += '</tr></thead>';
+            
+            const tbody = document.createElement('tbody');
+            for (let i = 0; i < rows; i++) {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<th>${i + 1}</th>`;
+                for (let j = 0; j < cols; j++) {
+                    const td = document.createElement('td');
+                    td.dataset.row = i;
+                    td.dataset.col = j;
+                    tr.appendChild(td);
+                }
+                tbody.appendChild(tr);
+            }
+            this.ui.sheetsTable.innerHTML = theadHtml;
+            this.ui.sheetsTable.appendChild(tbody);
+        }
+
+        _renderSheetFromData() {
+            const rows = Math.max(this.state.sheetData.length, this.CONSTANTS.DEFAULT_ROWS);
+            const cols = Math.max(this.state.sheetData.reduce((max, row) => Math.max(max, row.length), 0), this.CONSTANTS.DEFAULT_COLS);
+            this._renderSheet(rows, cols);
+            this.state.sheetData.forEach((row, i) => {
+                row.forEach((cellValue, j) => {
+                    const cell = this.ui.sheetsTable.querySelector(`td[data-row="${i}"][data-col="${j}"]`);
+                    if (cell) cell.innerText = cellValue || '';
+                });
+            });
+        }
+        
+        _addRows(count) {
+            const tbody = this.ui.sheetsTable.querySelector('tbody');
+            const existingRows = tbody.rows.length;
+            const colCount = this.ui.sheetsTable.querySelector('thead tr').cells.length - 1;
+            for (let i = 0; i < count; i++) {
+                const newRowIndex = existingRows + i;
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<th>${newRowIndex + 1}</th>`;
+                for (let j = 0; j < colCount; j++) {
+                    const td = document.createElement('td');
+                    td.dataset.row = newRowIndex; td.dataset.col = j;
+                    tr.appendChild(td);
+                }
+                tbody.appendChild(tr);
+            }
+        }
+
+        _addCols(count) {
+            const theadTr = this.ui.sheetsTable.querySelector('thead tr');
+            const existingCols = theadTr.cells.length - 1;
+            for(let i = 0; i < count; i++) {
+                const newColIndex = existingCols + i;
+                const th = document.createElement('th');
+                th.innerText = this._colToLetter(newColIndex);
+                theadTr.appendChild(th);
+            }
+
+            this.ui.sheetsTable.querySelectorAll('tbody tr').forEach((tr, rowIndex) => {
+                for(let i = 0; i < count; i++) {
+                    const newColIndex = existingCols + i;
+                    const td = document.createElement('td');
+                    td.dataset.row = rowIndex; td.dataset.col = newColIndex;
+                    tr.appendChild(td);
+                }
+            });
+        }
+
+        _handleSheetMouseDown(e) {
+            if (e.target.tagName !== 'TD') return;
+            this.state.isSheetMouseDown = true;
+            if (!e.ctrlKey && !e.metaKey) this._clearCellSelection();
+            this._selectCell(e.target);
+            e.preventDefault();
+        }
+
+        _handleSheetMouseOver(e) {
+            if (this.state.isSheetMouseDown && e.target.tagName === 'TD') {
+                this._selectCell(e.target);
+            }
+        }
+
+        _handleCellDoubleClick(e) {
+            const cell = e.target;
+            if (cell.tagName === 'TD') {
+                cell.setAttribute('contenteditable', 'true');
+                cell.focus();
+            }
+        }
+
+        _handleCellBlur(e) {
+            if (e.target.tagName === 'TD') {
+                e.target.removeAttribute('contenteditable');
+            }
+        }
+        
+        _selectCell(cell) {
+            if (!cell || this.state.selectedCells.includes(cell)) return;
+            cell.classList.add('selected');
+            this.state.selectedCells.push(cell);
+            this._updateFormulaBarFromCell(cell);
+        }
+
+        _clearCellSelection() {
+            this.state.selectedCells.forEach(cell => cell.classList.remove('selected'));
+            this.state.selectedCells = [];
+            document.querySelectorAll('.sheet-style-toggle').forEach(btn => btn.classList.remove('active'));
+        }
+        
+        _updateFormulaBarFromCell(cell) {
+            if (!cell) return;
+            const col = this._colToLetter(cell.dataset.col);
+            const row = parseInt(cell.dataset.row) + 1;
+            this.ui.selectedCellInfo.innerText = `${col}${row}`;
+            this.ui.formulaBar.value = cell.innerText;
+        }
+
+        _updateCellFromFormulaBar(value) {
+            if (this.state.selectedCells.length === 1) {
+                this.state.selectedCells[0].innerText = value;
+            }
+        }
+
+        _applyStyle(style, value) {
+            this.state.selectedCells.forEach(cell => cell.style[style] = value);
+        }
+
+        _toggleStyle(style, value, button) {
+            const isActive = button.classList.toggle('active');
+            let styleValue = '';
+            if (style === 'fontWeight') styleValue = isActive ? value : 'normal';
+            if (style === 'fontStyle') styleValue = isActive ? value : 'normal';
+            if (style === 'textDecoration') styleValue = isActive ? value : 'none';
+            this._applyStyle(style, styleValue);
+        }
+        
+        _handleZoom(direction) {
+            const step = 0.1;
+            if (direction === 'in') this.state.sheetZoom = Math.min(2, this.state.sheetZoom + step);
+            else if (direction === 'out') this.state.sheetZoom = Math.max(0.5, this.state.sheetZoom - step);
+            this._updateZoom();
+        }
+
+        _updateZoom() {
+            const zoomValue = this.state.sheetZoom;
+            this.ui.sheetsTable.style.transform = `scale(${zoomValue})`;
+            this.ui.zoomLevelDisplay.innerText = `${Math.round(zoomValue * 100)}%`;
+        }
+        
+        _applyBorders(borderType) {
+            if (this.state.selectedCells.length === 0) return;
+            this.ui.borderOptions.classList.add('hidden');
+
+            const clearBorders = (cell) => cell.classList.remove('border-top-dark', 'border-bottom-dark', 'border-left-dark', 'border-right-dark');
+
+            if (borderType === 'none') {
+                this.state.selectedCells.forEach(cell => clearBorders(cell));
+            } else if (borderType === 'all') {
+                this.state.selectedCells.forEach(cell => cell.classList.add('border-top-dark', 'border-bottom-dark', 'border-left-dark', 'border-right-dark'));
+            } else if (borderType === 'outside') {
+                let { minRow, maxRow, minCol, maxCol } = this.state.selectedCells.reduce((acc, cell) => {
+                    const r = parseInt(cell.dataset.row);
+                    const c = parseInt(cell.dataset.col);
+                    return {
+                        minRow: Math.min(acc.minRow, r), maxRow: Math.max(acc.maxRow, r),
+                        minCol: Math.min(acc.minCol, c), maxCol: Math.max(acc.maxCol, c)
+                    };
+                }, { minRow: Infinity, maxRow: -1, minCol: Infinity, maxCol: -1 });
+
+                this.state.selectedCells.forEach(cell => {
+                    const r = parseInt(cell.dataset.row);
+                    const c = parseInt(cell.dataset.col);
+                    clearBorders(cell);
+                    if (r === minRow) cell.classList.add('border-top-dark');
+                    if (r === maxRow) cell.classList.add('border-bottom-dark');
+                    if (c === minCol) cell.classList.add('border-left-dark');
+                    if (c === maxCol) cell.classList.add('border-right-dark');
+                });
+            }
+        }
+
+        // --- Utilities ---
+        _colToLetter(col) {
+            let letter = '', temp;
+            while (col >= 0) {
+                temp = col % 26;
+                letter = String.fromCharCode(temp + 65) + letter;
+                col = Math.floor(col / 26) - 1;
+            }
+            return letter;
+        }
+        
+        _showToast(message, type = 'success') {
+            this.ui.toast.textContent = message;
+            this.ui.toast.className = '';
+            this.ui.toast.classList.add(type, 'show');
+            setTimeout(() => this.ui.toast.classList.remove('show'), 3000);
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => new WebApp());
+</script>
+</body>
+</html>
